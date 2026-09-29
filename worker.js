@@ -1,48 +1,79 @@
 // worker.js
 // The whole server. Read it before you deploy it.
 //
-// One function. Cloudflare calls it with every request that reaches your
-// workers.dev URL and sends back whatever Response you return.
+// Cloudflare calls fetch() with every request that reaches the workers.dev URL
+// and sends back whatever Response is returned.
 //
-// Four things to recognize here, because you will need to recognize them
-// later in code you did not write:
+// Four things to recognize here:
 //   env.DB      the D1 binding from wrangler.toml (no connection string, nothing to leak)
 //   bind(?)     the user's value goes in as a parameter, never pasted into the SQL
 //   status 400  the EARS "unwanted behavior" row, executable
-//   CORS        headers that tell the browser your page is allowed to call this Worker
+//   CORS        headers telling the browser this page is allowed to call this Worker
 
-// Session B uses "*" so everyone's page works on the first try.
-// HW4 Craft credit: replace "*" with your page's origin once it is deployed.
-const CORS = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, POST, OPTIONS",
-  "access-control-allow-headers": "content-type",
-};
+// The origins this page is actually served from. Narrowed from the Session B
+// wildcard, which let any website in the world call this Worker from a visitor's
+// browser using that visitor's network position.
+//
+// What this does NOT fix, and it matters: CORS is a rule browsers enforce on
+// pages. It is not access control. Anyone with curl can still read, write, and
+// delete every entry here, because there is no authentication at all. That is
+// consequence 2 in ADR-002 and it is ADR-003's problem. Narrowing CORS is worth
+// doing and is not the fix; recording that distinction is the point.
+//
+// If the Codespace is recreated its hostname changes and the first entry below
+// must be updated, or the page will load and every request will be blocked.
+const ALLOWED_ORIGINS = [
+  "https://humble-couscous-r7pwj4p5g6v7hwxvp-5500.app.github.dev",
+  "http://localhost:5501",
+];
+
+function corsHeaders(request) {
+  const origin = request.headers.get("origin");
+  return {
+    // An origin that is not on the list gets the first allowed origin echoed
+    // back, which the browser compares against its own and rejects.
+    "access-control-allow-origin": ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
+    "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+    "access-control-allow-headers": "content-type",
+    "vary": "origin",
+  };
+}
+
+// The server enforces the same rule the page does, because a user can POST
+// straight to this URL and never load the page at all. FEATURES.md E12 is a
+// statement about the system, not about the form.
+const REQUIRED_FIELDS = [
+  { key: "coachName", label: "Coach name" },
+  { key: "school", label: "School" },
+  { key: "contactDate", label: "Date contacted" },
+  { key: "status", label: "Status" },
+];
+const MAX_FIELD_LENGTH = 200;
 
 export default {
   async fetch(request, env) {
     // Anything that throws below becomes a readable 500 instead of a bare
     // "Error 1101: Worker threw exception". The message names the cause,
-    // which is what your verification table needs.
+    // which is what the verification table needs.
     try {
       return await handle(request, env);
     } catch (err) {
-      return new Response("server error: " + err.message, { status: 500, headers: CORS });
+      return new Response("server error: " + err.message, { status: 500, headers: corsHeaders(request) });
     }
   },
 };
 
 async function handle(request, env) {
   const url = new URL(request.url);
+  const CORS = corsHeaders(request);
 
   // Browsers send an OPTIONS "preflight" before a JSON POST from another
   // origin. Answer it with the CORS headers and nothing else.
-  // (Not on the Session B slide; it is the one line the slide left out.)
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS });
   }
 
-  // The most common Session B failure: the D1 binding did not attach because
+  // The most common deploy failure: the D1 binding did not attach because
   // wrangler.toml still says PASTE_ID_HERE or the id was pasted badly.
   if (!env.DB) {
     return new Response(
@@ -51,8 +82,16 @@ async function handle(request, env) {
   }
 
   if (request.method === "GET" && url.pathname === "/entries") {
+    // The AS aliases hand the page the same camelCase keys it used when the
+    // data came from localStorage, so renderContactLog needed no changes.
     const { results } = await env.DB.prepare(
-      "SELECT * FROM entries ORDER BY id").all();
+      `SELECT id,
+              coach_name   AS coachName,
+              school       AS school,
+              contact_date AS contactDate,
+              status       AS status
+         FROM entries
+        ORDER BY id`).all();
     return Response.json(results, { headers: CORS });
   }
 
@@ -63,15 +102,58 @@ async function handle(request, env) {
     } catch {
       return new Response("body must be JSON", { status: 400, headers: CORS });
     }
-    if (!body.text) {
-      return new Response("text required", { status: 400, headers: CORS });
+
+    // Traces to FEATURES.md E12: IF a required field is empty when the entry is
+    // submitted, THEN THE SYSTEM SHALL reject the entry and name the field that
+    // is missing. Naming the field is the part that makes the 400 useful.
+    const problem = findFieldProblem(body);
+    if (problem !== null) {
+      return new Response(problem, { status: 400, headers: CORS });
     }
-    // HW4 Part 3: add one more validation rule here that traces to an
-    // EARS unwanted-behavior statement in your FEATURES.md.
-    await env.DB.prepare("INSERT INTO entries (text) VALUES (?)")
-      .bind(body.text).run();
+
+    // ===================================================================
+    // INSERT the validated contact entry into the database.
+    // Values are mapped from camelCase request fields to the snake_case schema.
+    // ===================================================================
+    await env.DB.prepare(
+      `INSERT INTO entries (coach_name, school, contact_date, status)
+       VALUES (?, ?, ?, ?)`
+    ).bind(
+      body.coachName,
+      body.school,
+      body.contactDate,
+      body.status
+    ).run();
+
     return new Response(null, { status: 201, headers: CORS });
   }
 
+  // The HW3 page has a Delete button. Without this route it would call an
+  // endpoint that does not exist and the row would reappear on reload, so the
+  // feature is kept rather than quietly dropped when the data moved.
+  if (request.method === "DELETE" && url.pathname.startsWith("/entries/")) {
+    const id = Number(url.pathname.slice("/entries/".length));
+    if (!Number.isInteger(id) || id <= 0) {
+      return new Response("entry id must be a positive whole number", { status: 400, headers: CORS });
+    }
+    await env.DB.prepare("DELETE FROM entries WHERE id = ?").bind(id).run();
+    return new Response(null, { status: 204, headers: CORS });
+  }
+
   return new Response("not found", { status: 404, headers: CORS });
+}
+
+function findFieldProblem(body) {
+  for (const field of REQUIRED_FIELDS) {
+    const value = body[field.key];
+    if (typeof value !== "string" || value.trim() === "") {
+      return `${field.label} is required.`;
+    }
+  }
+  for (const field of REQUIRED_FIELDS) {
+    if (body[field.key].length > MAX_FIELD_LENGTH) {
+      return `${field.label} must be ${MAX_FIELD_LENGTH} characters or fewer.`;
+    }
+  }
+  return null;
 }

@@ -25,16 +25,26 @@ test("EARS: IF the entry text is missing, THEN THE SYSTEM SHALL reject it (POST 
   assert.ok((await res.text()).length > 0, "400 carries a reason");
 });
 
-test("EARS: WHEN a valid entry is submitted, THE SYSTEM SHALL store it (POST then GET shows it)", async () => {
-  const marker = "eval-" + Date.now();
+// Adapted from the starter, which posted {text} against the template's
+// single-column schema. This project's entry is four fields (ADR-002), so the
+// starter version returned 400 rather than 201. The test was wrong, not the Worker.
+test("EARS E10: WHEN a valid entry is submitted, THE SYSTEM SHALL store it (POST then GET shows it)", async () => {
+  const marker = "eval-coach-" + Date.now();
   const post = await fetch(API + "/entries", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text: marker }),
+    body: JSON.stringify({
+      coachName: marker,
+      school: "Eval College",
+      contactDate: "2026-09-29",
+      status: "awaiting reply",
+    }),
   });
   assert.equal(post.status, 201);
   const list = await (await fetch(API + "/entries")).json();
-  assert.ok(list.some(e => e.text === marker), "posted entry appears in GET");
+  const saved = list.find(e => e.coachName === marker);
+  assert.ok(saved, "posted entry appears in GET");
+  assert.equal(saved.school, "Eval College", "fields land in their own columns");
 });
 
 // TODO (HW5 Part 5): one test for your delegated feature's endpoint or its
