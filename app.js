@@ -26,6 +26,7 @@
   const saveStatus = document.querySelector('#save-status');
   const emptyState = document.querySelector('#empty-state');
   const overdueCount = document.querySelector('#overdue-count');
+  const parentSummaryContent = document.querySelector('#parent-summary-content');
 
   const requiredFields = [
     { key: 'coachName', label: 'Coach name', element: coachNameInput },
@@ -59,7 +60,7 @@
     const result = await request('/entries');
     if (!result.ok) {
       showError('Could not load saved contacts. ' + result.message + ' The list below may be incomplete.');
-      return [];
+      return null;
     }
     return result.response.json();
   }
@@ -163,9 +164,13 @@
         deleteButton.disabled = true;
         const deleted = await deleteContact(entry.id);
         if (!deleted) { deleteButton.disabled = false; return; }
-        contactEntries = await loadContacts();
+        const reloaded = await loadContacts();
+        if (reloaded !== null) {
+          contactEntries = reloaded;
+        }
         entryError.textContent = '';
         renderContactLog();
+        renderParentSummary();
         saveStatus.textContent = 'Contact deleted.';
         coachNameInput.focus();
       });
@@ -173,6 +178,55 @@
       listItem.append(deleteButton);
       contactList.append(listItem);
     });
+  }
+
+  // E19–E23: a read-only summary for the parent, built from the same entries
+  // already in D1. No new storage, no new endpoint, no controls that could
+  // add, edit, or delete an entry.
+  function renderParentSummary() {
+    parentSummaryContent.replaceChildren();
+
+    if (lastLoadFailed) {
+      // E23: a network failure must not show counts that could be mistaken
+      // for current. The parent decides whether to spend money based on this.
+      const errorLine = document.createElement('p');
+      errorLine.className = 'summary-error';
+      errorLine.textContent = 'Could not load reply activity from the server. The summary is unavailable right now.';
+      parentSummaryContent.append(errorLine);
+      return;
+    }
+
+    // E21: say so in words rather than displaying a summary of zeros.
+    if (contactEntries.length === 0) {
+      const emptyLine = document.createElement('p');
+      emptyLine.className = 'summary-empty';
+      emptyLine.textContent = 'No coaches have been contacted yet.';
+      parentSummaryContent.append(emptyLine);
+      return;
+    }
+
+    const totalContacted = contactEntries.length;
+    const repliedEntries = contactEntries.filter(entry => entry.status === 'replied');
+
+    // E19: show the number contacted and the number who replied.
+    const summaryLine = document.createElement('p');
+    summaryLine.className = 'summary-line';
+    summaryLine.textContent = `${totalContacted} coach${totalContacted === 1 ? '' : 'es'} contacted, ${repliedEntries.length} ${repliedEntries.length === 1 ? 'has replied.' : 'have replied.'}`;
+    parentSummaryContent.append(summaryLine);
+
+    // E20: list each replied coach's name, school, and contact date.
+    if (repliedEntries.length > 0) {
+      const replyList = document.createElement('ul');
+      replyList.className = 'reply-list';
+
+      repliedEntries.forEach(entry => {
+        const item = document.createElement('li');
+        item.textContent = `${entry.coachName} — ${entry.school} — contacted ${entry.contactDate}`;
+        replyList.append(item);
+      });
+
+      parentSummaryContent.append(replyList);
+    }
   }
 
   contactForm.addEventListener('submit', async event => {
@@ -203,16 +257,32 @@
     const saved = await saveContact(candidate);
     if (!saved) return;
 
-    contactEntries = await loadContacts();
+    const reloaded = await loadContacts();
+    if (reloaded !== null) {
+      contactEntries = reloaded;
+    }
     renderContactLog();
+    renderParentSummary();
     contactForm.reset();
     coachNameInput.focus();
     saveStatus.textContent = 'Contact saved to the server.';
   });
 
+  // Tracks whether the most recent load failed so the parent summary can
+  // suppress counts that would be mistaken for current (E23).
+  let lastLoadFailed = false;
+
   // Initial load. The page starts empty and fills in when the server answers.
   (async () => {
-    contactEntries = await loadContacts();
+    const loaded = await loadContacts();
+    if (loaded !== null) {
+      contactEntries = loaded;
+      lastLoadFailed = false;
+    } else {
+      contactEntries = [];
+      lastLoadFailed = true;
+    }
     renderContactLog();
+    renderParentSummary();
   })();
 })();
