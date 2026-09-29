@@ -98,6 +98,8 @@ Sorted by count.
 | `node --test evals/` fails on Node 24 | 1 | HW5 template | tooling |
 | Tests left rows in the live database, inflating the summary count | 1 | my own evals | tooling |
 | Python `urllib` gets 403 from the Worker; `curl` and `fetch` do not | 1 | Cloudflare bot protection | tooling |
+| STYLE.md defined no error-colour token, so the error red was never a token | 1 | judgment eval, Grader 2 | STYLE |
+| `color-surface` is 1.01:1 against `color-background`; the summary card is tonally invisible | 1 | contrast check | STYLE |
 
 Two observations about this table rather than about any single row.
 
@@ -118,7 +120,10 @@ That is what verification time actually buys.
   Two of the five exercise the delegated feature's effect on `GET /entries`.
 - **Judgment:** `docs/JUDGMENT.md`, 10 questions, two graders (Ryan Linde and
   Gemini via Google AI Studio, prompted in a fresh session with the prompt
-  recorded). Agreement: *pending Grader 2's answers.*
+  recorded). **10 questions, agreement 10 of 10 (100%).** No verdict
+  disagreements, so no rubric finding. The graders did differ on *evidence*:
+  Grader 2 named `#922020` among the non-token colours and Grader 1 had missed
+  it, which surfaced the fact that STYLE.md had no error-colour token at all.
 
 ## Verification table (carried from HW4)
 
