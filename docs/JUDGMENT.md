@@ -14,19 +14,20 @@ from the tool that did the work is agreement with itself, not a second opinion.
 
 | # | Question | Grader 1 (Ryan) | Grader 2 (Gemini) | Agree? |
 |---|---|---|---|---|
-| 1 | Does the parent summary show both the number of coaches contacted and the number who have replied? | Yes | | |
-| 2 | Does it list each replied coach's name, school, and contact date? | Yes | | |
-| 3 | When no coaches have been contacted, does it say so in words rather than showing a count of zero? | Yes | | |
-| 4 | Is the parent summary free of any button, link, or input that could add, edit, or delete an entry? | Yes | | |
-| 5 | When the server cannot be reached, does the summary withhold the counts rather than showing zeros? | Yes | | |
-| 6 | Does every piece of user-supplied text reach the page through `textContent` rather than `innerHTML`? | Yes | | |
-| 7 | Does the parent summary read from the existing `GET /entries` rather than any separate storage? | Yes | | |
-| 8 | Do all colours used in the parent summary appear as tokens in STYLE.md? | **No** | | |
-| 9 | Is every spacing and radius value in the parent summary CSS a multiple of the 8px `space-unit` token? | **No** | | |
-| 10 | Is the page free of any framework, CDN script tag, or npm dependency? | Yes | | |
+| 1 | Does the parent summary show both the number of coaches contacted and the number who have replied? | Yes | Yes | Agree |
+| 2 | Does it list each replied coach's name, school, and contact date? | Yes | Yes | Agree |
+| 3 | When no coaches have been contacted, does it say so in words rather than showing a count of zero? | Yes | Yes | Agree |
+| 4 | Is the parent summary free of any button, link, or input that could add, edit, or delete an entry? | Yes | Yes | Agree |
+| 5 | When the server cannot be reached, does the summary withhold the counts rather than showing zeros? | Yes | Yes | Agree |
+| 6 | Does every piece of user-supplied text reach the page through `textContent` rather than `innerHTML`? | Yes | Yes | Agree |
+| 7 | Does the parent summary read from the existing `GET /entries` rather than any separate storage? | Yes | Yes | Agree |
+| 8 | Do all colours used in the parent summary appear as tokens in STYLE.md? | **No** | **No** | Agree |
+| 9 | Is every spacing and radius value in the parent summary CSS a multiple of the 8px `space-unit` token? | **No** | **No** | Agree |
+| 10 | Is the page free of any framework, CDN script tag, or npm dependency? | Yes | Yes | Agree |
 
-**Agreement: _ of 10 (_%).** Under 80% is a finding about the rubric, not about
-the build, and goes in the error-analysis log.
+**Agreement: 10 of 10 (100%).** No disagreements. Above the 80% threshold, so
+there is no rubric finding to log — but see the note below, because identical
+verdicts did not mean identical evidence.
 
 ## Notes on Grader 1's two No answers
 
@@ -66,10 +67,30 @@ appended, in a new session with no prior context:
 >
 > [the ten questions, verbatim from the table above]
 
+## Where the two graders differed, despite agreeing
+
+Every verdict matched, which is a clean result and a dull one. One thing is worth
+recording anyway.
+
+**Q8: Grader 2 found a colour Grader 1 missed.** I cited `#45586b` and `#e0e0e0`
+as the non-token colours in the parent summary. Gemini cited those two **plus
+`#922020`**, the error red on `.summary-error`. It is right, and I had overlooked
+it because `#922020` was already in `styles.css` before this feature and I was
+only looking at what bolt added.
+
+That matters beyond this row: **STYLE.md has no error colour token at all.** Six
+tokens are defined and none of them covers the state the page enters whenever the
+server is unreachable, which is the state a parent is most likely to see at the
+worst moment. The gap is in my tokens file, not in bolt's output, and it was
+found by the second grader rather than by me. Fixed in STYLE.md as part of HW5.
+
+Both graders answering "No" for partly-overlapping reasons is exactly the case a
+binary rubric hides. The verdict column agreed; the evidence column did not, and
+the evidence column is where the finding was.
+
 ## Rubric revisions made
 
-*(If a question turns out to be ambiguous enough that two graders read it
-differently, the fix is to rewrite the question until they cannot, and to record
-the rewrite here rather than quietly changing it.)*
-
-- *pending Grader 2's answers*
+None. No question produced a split verdict, so no question needed rewriting. The
+instruction to answer No when something is only partly true did real work on Q8
+and Q9, where both graders faced a mix of compliant and non-compliant values and
+both resolved it the same way.
